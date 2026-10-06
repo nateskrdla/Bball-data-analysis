@@ -1,0 +1,89 @@
+import pandas as pd
+from scipy.stats import rankdata
+
+# Load original data
+df = pd.read_csv("trank_player_data.csv")
+
+# Identify non-numeric columns
+non_numeric_cols = ['Player', 'Team', 'Conference', 'ROLE']
+
+# Filter out players with MIN% < 10
+df = df[df['MIN%'] >= 10].copy()
+
+# Create new derived columns
+df['RIMr'] = df['RIMA'] / (df['2PA'] + df['3PA'])
+df['3PAr'] = df['3PA'] / (df['2PA'] + df['3PA'])
+df['AST:USG'] = df['AST%'] / df['USG%']
+df['3PA'] = df['3PA'] / df['G']
+df['RIMA'] = df['RIMA'] / df['G']
+df['2PA'] = df['2PA'] / df['G']
+df['FTA'] = df['FTA'] / df['G']
+df['3PM'] = df['3PM'] / df['G']
+df['RIMM'] = df['RIMM'] / df['G']
+df['2PM'] = df['2PM'] / df['G']
+df['FTM'] = df['FTM'] / df['G']
+# Save updated raw data
+df.to_csv("trank_player_data_updated.csv", index=False)
+print("✅ Saved: trank_player_data_updated.csv")
+
+# Convert all other columns to numeric
+for col in df.columns:
+    if col not in non_numeric_cols:
+        df[col] = pd.to_numeric(df[col], errors='coerce')
+
+# Copy for percentile ranking
+percentile_df = df.copy()
+
+# List of "lower is better" stats to invert
+invert_metrics = ['TOV%', 'DRtg']
+
+# Optional: filter for players with a minimum number of 3PA to avoid noise
+min_3PA = .4
+filtered_df = df[df['3PA'] >= min_3PA].copy()
+
+# Compute percentile ranks
+for col in df.columns:
+    if col in non_numeric_cols:
+        continue
+
+    col_data = df[col]
+
+    # For shooting percentages, only include players with enough attempts
+    if col in ['3P%', 'eFG%', 'TS%', 'FT%', '2P%', 'RIM%']:
+        valid_idx = df[df['3PA'] >= min_3PA][col].dropna().index
+    else:
+        valid_idx = col_data.dropna().index
+
+    if len(valid_idx) > 0:
+        values = col_data.loc[valid_idx]
+        ranks = rankdata(values, method='average') / len(values) * 100
+
+        if col in invert_metrics:
+            ranks = 100 - ranks
+
+        percentile_df[col] = pd.NA  # Initialize with missing
+        percentile_df.loc[valid_idx, col] = pd.Series(ranks, index=valid_idx).round(2)
+    else:
+        percentile_df[col] = pd.NA
+
+# Final clean-up
+percentile_df = percentile_df.loc[:, ~percentile_df.columns.str.contains('^Unnamed')]
+
+# Save to CSV
+percentile_df.to_csv("trank_player_percentile_data.csv", index=False)
+print("✅ Saved: trank_player_percentile_data.csv")
+
+# Preview
+print(percentile_df.dtypes)
+print(percentile_df.head())
+
+# Check percentile data for Khaman Maluach
+player_name = "Khaman Maluach"
+player_data = percentile_df[percentile_df["Player"] == player_name]
+
+if not player_data.empty:
+    print(f"\n🎯 Percentile data for {player_name}:\n")
+    print(player_data.T)  # Transpose for easier reading
+else:
+    print(f"\n⚠️ No data found for player: {player_name}")
+
