@@ -1,0 +1,87 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+import numpy as np
+from matplotlib.patches import FancyBboxPatch
+
+# Load college basketball data
+percentile_file = "trank_player_percentile_data.csv"
+raw_file = "trank_player_data_updated.csv"
+
+percentile_df = pd.read_csv(percentile_file)
+raw_df = pd.read_csv(raw_file)
+
+# Adjust to your actual stat column names if needed
+columns_to_plot = [
+    '3PM','3PA','3PAr','3P%','2PM','2PA', '2P%', 'RIMA', 'RIMr', 'RIM%', 'FTM', 'FTA', 'FTr', 'FT%', 'eFG%', 'TS%', 'USG%', 'ORtg', 'DRtg', 
+                   'BLK%', 'STL%', 'DRB%', 'ORB%', 'AST%', 'AST:USG', 'TOV%']
+
+player = "Zach Hicks"
+
+player_percentiles = percentile_df[percentile_df['Player'] == player]
+player_raw = raw_df[raw_df['Player'] == player]
+
+if player_percentiles.empty or player_raw.empty:
+    print(f"Data for {player} not found.")
+else:
+    per100_values = player_raw[columns_to_plot].iloc[0].values
+    percentiles = player_percentiles[columns_to_plot].iloc[0].values
+
+    # Replace NaNs in percentiles and check scale
+    percentiles = np.nan_to_num(percentiles, nan=0.0)
+    if np.max(percentiles) <= 1.0:
+        percentiles *= 100
+
+    plot_df = pd.DataFrame({
+        "Statistic": columns_to_plot,
+        "Per 100 Poss": per100_values,
+        "Percentile": percentiles
+    })
+    plot_df["Percentile"] = plot_df["Percentile"].fillna(0)
+
+    # Modern font
+    plt.rcParams['font.family'] = 'DejaVu Sans'
+
+    fig, ax = plt.subplots(figsize=(6, 6.7))
+
+    plt.suptitle(f"{player} - 2024-2025 Overview", fontsize=12, weight='bold', y=0.96)
+
+    y_pos = np.arange(len(plot_df))
+    cmap = mpl.cm.coolwarm
+    norm = mpl.colors.Normalize(vmin=0, vmax=100)
+    colors = cmap(norm(plot_df["Percentile"]))
+
+    ax.barh(y_pos, plot_df["Percentile"], color=colors, height=0.5)
+
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(plot_df["Statistic"], fontsize=8.5)
+    ax.invert_yaxis()
+
+    for i, (pct, val) in enumerate(zip(plot_df["Percentile"], plot_df["Per 100 Poss"])):
+        ax.text(-5, i, f"{val:.2f}", va='center', ha='right', fontsize=7.5)
+        text_x = min(pct + 2, 100)
+        text_y = i
+
+        box = FancyBboxPatch((text_x - 3.5, text_y - 0.17), 7, 0.34,
+                             boxstyle="round,pad=0.15",
+                             fc='white', ec='black', lw=0.5,
+                             alpha=0.8,
+                             mutation_aspect=2)
+        ax.add_patch(box)
+
+        ax.text(text_x, text_y, f"{int(round(pct))}", va='center', ha='center',
+                fontsize=7.8, color='black', weight='bold')
+
+    ax.set_xlim(-15, 105)
+    ax.set_xticks([0, 25, 50, 75, 100])
+    ax.xaxis.grid(True, linestyle='--', alpha=0.3)
+    ax.set_axisbelow(True)
+
+    for spine in ["top", "right", "left"]:
+        ax.spines[spine].set_visible(False)
+
+    ax.text(-8, -1, "Metric", fontsize=8.5, weight='bold', ha='right')
+    ax.text(50, -1, "Percentile Ranking", fontsize=8.5, weight='bold', ha='center')
+
+    plt.tight_layout()
+    plt.show()
