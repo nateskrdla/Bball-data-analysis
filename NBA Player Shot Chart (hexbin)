@@ -1,0 +1,148 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.patches import RegularPolygon, Circle, Rectangle, Arc
+import matplotlib as mpl
+
+# Load data
+df = pd.read_csv("NBA_2025_shots.csv")
+df["SHOT_MADE"] = df["SHOT_MADE"].astype(int)
+
+# Choose player
+player_name = "Shai Gilgeous-Alexander"
+player_df = df[df["PLAYER_NAME"] == player_name].copy()
+shots = player_df.copy()
+
+# Parameters
+hex_radius_base = 1.0
+max_hex_radius = 1.2
+min_hex_radius = 0.4
+hex_width = 2 * hex_radius_base
+hex_height = np.sqrt(3) * hex_radius_base
+x_min, x_max = -25, 25
+y_min, y_max = 0, 47
+
+# Generate honeycomb centers
+x_centers = np.arange(x_min, x_max + hex_width, hex_width * 0.75)
+y_centers_even = np.arange(y_min, y_max + hex_height, hex_height)
+y_centers_odd = y_centers_even + (hex_height / 2)
+
+hex_centers = []
+for i, x in enumerate(x_centers):
+    y_vals = y_centers_even if i % 2 == 0 else y_centers_odd
+    for y in y_vals:
+        hex_centers.append((x, y))
+
+# Create DataFrame of hex centers
+hex_df = pd.DataFrame(hex_centers, columns=["x", "y"])
+
+# Assign shots to nearest hex center
+def assign_hex_center(row):
+    dists = np.sqrt((hex_df["x"] - row["LOC_X"])**2 + (hex_df["y"] - row["LOC_Y"])**2)
+    return dists.idxmin()
+
+shots["hex_id"] = shots.apply(assign_hex_center, axis=1)
+df["hex_id"] = df.apply(assign_hex_center, axis=1)
+
+# Player stats per hex
+player_hex = shots.groupby("hex_id").agg(
+    player_fg_pct=("SHOT_MADE", "mean"),
+    player_attempts=("SHOT_MADE", "count")
+).reset_index()
+
+# League stats per hex
+league_hex = df.groupby("hex_id").agg(
+    league_fg_pct=("SHOT_MADE", "mean")
+).reset_index()
+
+# Merge with hex centers
+hex_df = hex_df.reset_index().rename(columns={"index": "hex_id"})
+merged = pd.merge(hex_df, player_hex, on="hex_id", how="left")
+merged = pd.merge(merged, league_hex, on="hex_id", how="left")
+
+# Filter for minimum attempts
+merged = merged[merged["player_attempts"] >= 2].copy()
+
+# FG% difference and normalization
+merged["fg_diff"] = merged["player_fg_pct"] - merged["league_fg_pct"]
+max_abs_diff = merged["fg_diff"].abs().max()
+# Exponential stretch to emphasize mid-range differences
+merged["norm_fg"] = np.sign(merged["fg_diff"]) * (np.abs(merged["fg_diff"]) ** 0.5) / (max_abs_diff ** 0.5)
+
+
+# Size scaling
+max_attempts = merged["player_attempts"].max()
+merged["radius"] = min_hex_radius + (merged["player_attempts"] / max_attempts) * (max_hex_radius - min_hex_radius)
+
+# Color map
+cmap = mpl.colormaps.get_cmap("coolwarm")
+norm = mpl.colors.Normalize(vmin=-1, vmax=1)
+
+# Draw court
+def draw_court(ax=None, color='white', lw=1):
+    if ax is None:
+        ax = plt.gca()
+    elements = [
+        Circle((0, 4.75), 0.75, lw=lw, color=color, fill=False),
+        Rectangle((-3, 4), 6, 0.1, lw=lw, color=color),
+        Rectangle((-8, 0), 16, 19, lw=lw, color=color, fill=False),
+        Rectangle((-6, 0), 12, 19, lw=lw, color=color, fill=False),
+        Arc((0, 19), 12, 12, theta1=0, theta2=180, lw=lw, color=color),
+        Arc((0, 19), 12, 12, theta1=180, theta2=0, linestyle='dashed', lw=lw, color=color),
+        Arc((0, 4.75), 8, 8, theta1=0, theta2=180, lw=lw, color=color),
+        Rectangle((-22.09, 0), 0, 13.7, lw=lw, color=color),
+        Rectangle((21.96, 0), 0, 13.7, lw=lw, color=color),
+        Arc((0, 4.75), 47.5, 47.5, theta1=22, theta2=158, lw=lw, color=color),
+        Arc((0, 47), 12, 12, theta1=180, theta2=0, lw=lw, color=color),
+        Arc((0, 47), 4, 4, theta1=180, theta2=0, lw=lw, color=color)
+    ]
+    for e in elements:
+        ax.add_patch(e)
+    return ax
+
+
+
+
+# Plotting
+fig, ax = plt.subplots(figsize=(6.5, 6), facecolor="black")
+ax.set_facecolor("black")
+
+# Plot hexagons
+for _, row in merged.iterrows():
+    hex_patch = RegularPolygon(
+        (row["x"], row["y"]),
+        numVertices=6,
+        radius=row["radius"],
+        orientation=np.radians(30),
+        facecolor=cmap(norm(row["norm_fg"])),
+        edgecolor="none"
+    )
+    ax.add_patch(hex_patch)
+
+# Draw court lines on top
+draw_court(ax, color='white', lw=0.8)
+
+# Colorbar
+sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+sm.set_array([])
+cbar = fig.colorbar(sm, ax=ax, fraction=0.03, pad=0.04)
+cbar.set_label("FG% vs League (Normalized)", fontsize=9, color="white")
+cbar.ax.yaxis.set_tick_params(color='white')
+plt.setp(plt.getp(cbar.ax.axes, 'yticklabels'), color='white', fontsize=8)
+
+# Title
+ax.set_title(
+    f"{player_name} Shot Chart vs League (2024-25)",
+    fontsize=14, weight='bold', color='white', pad=15
+)
+
+
+# Layout
+ax.set_xlim(x_min, x_max)
+ax.set_ylim(y_min, y_max)
+ax.set_aspect("equal")
+ax.axis("off")
+plt.tight_layout()
+fig.patch.set_facecolor('black')
+
+plt.show()
