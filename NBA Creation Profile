@@ -1,0 +1,93 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# --- Toggle Between Regular Season and Playoffs ---
+season_type = "regular"  # Change to "regular" or "playoffs"
+
+# Set file path and subtitle based on season type
+if season_type == "playoffs":
+    file_path = "nba_playoff_stats_percentiles_2024_2025.csv"
+    subtitle_text = "Player Percentile Rankings (Playoffs)"
+else:
+    file_path = "nba_combined_stats_percentiles_2024_2025.csv"
+    subtitle_text = "Player Percentile Rankings"
+
+# --- Load Data ---
+percentile_data = pd.read_csv(file_path)
+
+# --- Player Selection ---
+player = "Kevin Durant"
+season = "2024-2025"
+columns_to_plot = [
+    'RIM%', 'RIMr', '3PAr', 'FTr', 'TS%', 
+    '% 2FG Unassisted', '% 3FG Unassisted', 'TOV%',
+    'USG%', 'AST%', 'AST:USG'
+]
+
+# --- Filter Data ---
+player_data = percentile_data[
+    (percentile_data['Player'] == player) &
+    (percentile_data['Season_poss'] == season)
+]
+
+if player_data.empty:
+    print(f"No data found for {player} in {season} ({season_type})")
+else:
+    values = player_data[columns_to_plot].iloc[0].values
+    num_vars = len(columns_to_plot)
+    angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
+    values = values.tolist()
+
+    # --- Plot Settings ---
+    cmap = plt.cm.coolwarm
+    norm = plt.Normalize(0, 1)
+    colors = cmap(norm(values))
+    width = 2 * np.pi / num_vars
+
+    fig, ax = plt.subplots(figsize=(10, 10), subplot_kw=dict(polar=True), facecolor="white")
+    ax.set_facecolor("#f7f7f7")
+
+    bars = ax.bar(angles, values, width=width, color=colors, edgecolor='none', linewidth=0)
+
+    for i in range(num_vars):
+        angle = angles[i] + width / 2
+        ax.plot([angle, angle], [0, 1], color='lightgray', linewidth=0.5)
+
+    label_radius = 1.06
+    for angle, label in zip(angles, columns_to_plot):
+        ax.text(
+            angle,
+            label_radius,
+            label,
+            ha='center',
+            va='center',
+            fontsize=10,
+            color='black',
+            fontweight='light'
+        )
+
+    for angle, value in zip(angles, values):
+        ax.text(
+            angle,
+            value + 0,
+            f"{value * 100:.1f}%",
+            ha='center',
+            va='center',
+            fontsize=8,
+            color='black',
+            bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", lw=0.5)
+        )
+
+    ax.set_theta_offset(np.pi / 2)
+    ax.set_theta_direction(-1)
+    ax.set_ylim(0, 1)
+    ax.set_yticks([])
+    ax.set_xticks([])
+
+    ax.set_title(f"{player} Creation Profile ({season})", fontsize=16, y=1.15, fontweight='bold')
+    fig.suptitle(subtitle_text, fontsize=10, y=.93)
+    plt.figtext(0.5, 0.004, "Data Source: basketball-reference.com", ha='center', fontsize=8, color='black')
+
+    plt.tight_layout()
+    plt.show()
