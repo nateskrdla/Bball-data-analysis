@@ -1,0 +1,71 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Load the percentile data
+file_path = "trank_player_percentile_data.csv"
+percentile_data = pd.read_csv(file_path)
+
+# Select player and columns to plot
+player = "Max Shulga"
+columns_to_plot = ['3PA', '3PAr', '3P%', '2PA', '2P%', 'RIMr', 'RIM%',
+                   'FTr','TS%', 'USG%']
+
+# Filter data
+player_data = percentile_data[percentile_data['Player'] == player]
+
+if player_data.empty:
+    print(f"No data found for {player}")
+else:
+    raw_values = player_data[columns_to_plot].iloc[0].values
+    values = (raw_values / 100).tolist()  # Convert 0–100 percentiles to 0–1 scale for plotting
+    num_vars = len(columns_to_plot)
+    angles = np.linspace(0, 2 * np.pi, num_vars, endpoint=False).tolist()
+    width = 2 * np.pi / num_vars
+
+    # Color map normalized for 0–100 input
+    cmap = plt.cm.coolwarm
+    norm = plt.Normalize(0, 100)
+    colors = cmap(norm(raw_values))
+
+    # Plot
+    fig, ax = plt.subplots(figsize=(10, 10), subplot_kw=dict(polar=True), facecolor="white")
+    ax.set_facecolor("#f7f7f7")
+    bars = ax.bar(angles, values, width=width, color=colors, edgecolor='none', linewidth=0)
+
+    # Radial dividers
+    for i in range(num_vars):
+        angle = angles[i] + width / 2
+        ax.plot([angle, angle], [0, 1], color='lightgray', linewidth=0.5)
+
+    # Outer labels
+    label_radius = 1.06
+    for angle, label in zip(angles, columns_to_plot):
+        ax.text(angle, label_radius, label, ha='center', va='center', fontsize=10, color='black', fontweight='light')
+
+    # Value labels
+    for angle, value in zip(angles, raw_values):  # Use raw_values here for actual 0–100 display
+        ax.text(
+            angle,
+            value / 100,
+            f"{value:.1f}%",
+            ha='center',
+            va='center',
+            fontsize=8,
+            color='black',
+            bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="gray", lw=0.5)
+        )
+
+    # Chart styling
+    ax.set_theta_offset(np.pi / 2)
+    ax.set_theta_direction(-1)
+    ax.set_ylim(0, 1)
+    ax.set_yticks([])
+    ax.set_xticks([])
+
+    ax.set_title(f"{player} Shooting Profile", fontsize=16, y=1.15, fontweight='bold')
+    fig.suptitle("Player Percentile Rankings", fontsize=10, y=.93)
+    plt.figtext(0.5, 0.005, "Data Source: barttorvik.com", ha='center', fontsize=8, color='black')
+
+    plt.tight_layout()
+    plt.show()
