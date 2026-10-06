@@ -1,0 +1,75 @@
+import pandas as pd 
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+from matplotlib.colors import Normalize
+
+# Read the Excel file
+data = pd.read_excel("NBA_playoffs_players_playtype_data.xlsx")
+
+def create_data_viz_table(team_name):
+    team_data = data[data['TEAM'] == team_name].copy()
+    
+    table_data = team_data[['PLAY_TYPE', 'FREQ', 'FREQ_PCTL', 'PPP', 'PPP_PCTL']].copy()
+    table_data.set_index('PLAY_TYPE', inplace=True)
+    table_data.sort_values(by='FREQ', ascending=False, inplace=True)
+
+    # Save a mask of non-null values for use with colormapping
+    valid_freq_mask = table_data['FREQ_PCTL'].notna()
+    valid_ppp_mask = table_data['PPP_PCTL'].notna()
+
+    # Normalize for valid entries only
+    norm_freq = Normalize(vmin=0, vmax=100)
+    norm_ppp = Normalize(vmin=0, vmax=100)
+
+
+    cmap = plt.colormaps['coolwarm']
+    freq_colors = [cmap(norm_freq(val)) if pd.notna(val) else (1, 1, 1, 1) for val in table_data['FREQ_PCTL']]
+    ppp_colors = [cmap(norm_ppp(val)) if pd.notna(val) else (1, 1, 1, 1) for val in table_data['PPP_PCTL']]
+
+    # Build color array
+    hex_colors = []
+    for i in range(len(table_data)):
+        row_colors = ['white']  # PLAY_TYPE
+        row_colors += [
+            'white',         # FREQ
+            freq_colors[i],  # FREQ_PCTL
+            'white',         # PPP
+            ppp_colors[i]    # PPP_PCTL
+        ]
+        hex_colors.append(row_colors)
+
+    # Replace NaN values with '-' *after* all calculations
+    display_data = table_data.copy().astype(object).fillna("-").infer_objects(copy=False)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.axis('off')
+    table = ax.table(
+        cellText=display_data.reset_index().values,
+        colLabels=["PLAY TYPE"] + list(display_data.columns),
+        cellColours=hex_colors,
+        cellLoc='center',
+        loc='center'
+    )
+
+    table.auto_set_font_size(False)
+    table.set_fontsize(12)
+    table.scale(1.2, 1.2)
+
+    # Header styling
+    for j in range(len(display_data.columns) + 1):  # +1 for PLAY_TYPE column
+        cell = table[0, j]
+        cell.set_facecolor('#404040')
+        cell.set_text_props(weight='bold', color='white')
+
+    # Remove gridlines
+    for cell in table.get_celld().values():
+        cell.set_edgecolor('none')
+
+    plt.title(f"{team_name} Play Type Frequency and Efficiency", fontsize=16, fontweight='bold')
+    plt.subplots_adjust(top=0.2)  # Lower value = less gap; try 0.85–0.90
+    plt.tight_layout()
+    plt.show()
+
+# Example usage
+create_data_viz_table("Jayson Tatum")
