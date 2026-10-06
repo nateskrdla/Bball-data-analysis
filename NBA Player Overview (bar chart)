@@ -1,0 +1,104 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+import numpy as np
+from matplotlib.patches import FancyBboxPatch
+
+# === Toggle Here ===
+season_type = "regular"  # options: "regular" or "playoffs"
+
+# File paths based on season type
+if season_type == "regular":
+    percentile_file = "nba_combined_stats_percentiles_2024_2025.csv"
+    raw_file = "nba_combined_stats_updated_2024_2025.csv"
+elif season_type == "playoffs":
+    percentile_file = "nba_playoff_stats_percentiles_2024_2025.csv"
+    raw_file = "nba_playoff_stats_2024_2025.csv"
+else:
+    raise ValueError("Invalid season_type. Use 'regular' or 'playoffs'.")
+
+# Load data
+percentile_df = pd.read_csv(percentile_file)
+raw_df = pd.read_csv(raw_file)
+
+# Stats to plot
+columns_to_plot = ['3P','3PA','3PAr','3P%','2P','2PA', '2PAr', '2P%', 'RIMA', 'RIMr', 'RIM%', 'FT', 'FTA', 'FTr', 'FT%', 'eFG%', 'TS%', 'PPP', 'USG%', 'ORtg', 'DRtg', 
+                   'BLK%', 'STL%', 'DRB%', 'ORB%', 'AST%', 'AST:USG', 'TOV%']
+
+# Player and season
+player = "Nikola Jokić"
+season = "2024-2025"
+
+# Filter for player
+player_percentiles = percentile_df[
+    (percentile_df['Player'] == player) & 
+    (percentile_df['Season_poss'] == season)
+]
+
+player_raw = raw_df[
+    (raw_df['Player'] == player) & 
+    (raw_df['Season_poss'] == season)
+]
+
+if player_percentiles.empty or player_raw.empty:
+    print(f"Data for {player} in {season} not found.")
+else:
+    per100_values = player_raw[columns_to_plot].iloc[0].values
+    percentiles = player_percentiles[columns_to_plot].iloc[0].values
+
+    # Convert percentiles NaNs to 0
+    percentiles = np.nan_to_num(percentiles, nan=0.0)
+    if np.max(percentiles) <= 1.0:
+        percentiles *= 100
+
+    plot_df = pd.DataFrame({
+        "Statistic": columns_to_plot,
+        "Per 100 Poss": per100_values,
+        "Percentile": percentiles
+    })
+    
+    plot_df["Percentile"] = plot_df["Percentile"].fillna(0)
+
+    # Plot setup
+    plt.rcParams['font.family'] = 'DejaVu Sans'
+    fig, ax = plt.subplots(figsize=(6, 6.7))
+
+    # === Dynamic Title ===
+    title_suffix = "Playoff Overview" if season_type == "playoffs" else "Overview"
+    plt.suptitle(f"{player} - {season} {title_suffix}", fontsize=12, weight='bold', y=0.96)
+
+    y_pos = np.arange(len(plot_df))
+    cmap = mpl.cm.coolwarm
+    norm = mpl.colors.Normalize(vmin=0, vmax=100)
+    colors = cmap(norm(plot_df["Percentile"]))
+
+    ax.barh(y_pos, plot_df["Percentile"], color=colors, height=0.5)
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(plot_df["Statistic"], fontsize=8.5)
+    ax.invert_yaxis()
+
+    for i, (pct, val) in enumerate(zip(plot_df["Percentile"], plot_df["Per 100 Poss"])):
+        ax.text(-5, i, f"{val:.2f}", va='center', ha='right', fontsize=7.5)
+        text_x = min(pct + 2, 100)
+        text_y = i
+        box = FancyBboxPatch((text_x - 3.5, text_y - 0.17), 7, 0.34, 
+                             boxstyle="round,pad=0.15", 
+                             fc='white', ec='black', lw=0.5, 
+                             alpha=0.8, mutation_aspect=2)
+        ax.add_patch(box)
+        ax.text(text_x, text_y, f"{int(round(pct))}", va='center', ha='center', 
+                fontsize=7.8, color='black', weight='bold')
+
+    ax.set_xlim(-15, 105)
+    ax.set_xticks([0, 25, 50, 75, 100])
+    ax.xaxis.grid(True, linestyle='--', alpha=0.3)
+    ax.set_axisbelow(True)
+
+    for spine in ["top", "right", "left"]:
+        ax.spines[spine].set_visible(False)
+
+    ax.text(-5, -1, "Per 100 Poss", fontsize=8.5, weight='bold', ha='right')
+    ax.text(50, -1, "Percentile Ranking", fontsize=8.5, weight='bold', ha='center')
+
+    plt.tight_layout()
+    plt.show()
