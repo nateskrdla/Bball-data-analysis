@@ -1,0 +1,68 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+
+# Load the percentile data
+file_path = "nba_100poss_advanced_percentiles_2010_2025.csv"
+percentile_data = pd.read_csv(file_path)
+
+# Define players and their respective seasons
+player_season_map = {
+    "Jaylen Brown": "2024-2025",
+    "Franz Wagner": "2024-2025"
+}
+columns_to_plot = ['3P%', '2P%', 'FTr', 'eFG%', 'ORtg', 'DRtg', 'BLK%', 'STL%', 'DRB%', 'ORB%', 'TOV%', 'AST%', 'USG%']
+
+# Collect values per player-season
+values_list = []
+players = list(player_season_map.keys())
+
+for player in players:
+    season = player_season_map[player]
+    data = percentile_data[(percentile_data['Player'] == player) & (percentile_data['Season_poss'] == season)]
+    if not data.empty:
+        values = data[columns_to_plot].iloc[0].values
+        values_list.append(values)
+    else:
+        print(f"{player} not found in {season} data.")
+        values_list.append([0] * len(columns_to_plot))
+
+# Radar chart setup
+angles = np.linspace(0, 2 * np.pi, len(columns_to_plot), endpoint=False).tolist()
+angles += [angles[0]]
+
+fig, ax = plt.subplots(subplot_kw=dict(polar=True), figsize=(8, 8), facecolor='#f3f6f4')
+ax.set_theta_offset(np.pi / 2)
+ax.set_theta_direction(-1)
+ax.set_xticks(angles[:-1])
+ax.set_xticklabels(columns_to_plot, color='black', size=10)
+ax.set_facecolor('#eeeeee')
+
+colors = ["blue", "#008000"]
+for i, (player, values) in enumerate(zip(players, values_list)):
+    values = np.append(values, values[0])
+    ax.plot(angles, values, linewidth=1, linestyle='solid', label=f"{player} ({player_season_map[player]})", color=colors[i])
+    ax.fill(angles, values, alpha=0.4, color=colors[i])
+    for angle, value in zip(angles, values[:-1]):
+        ax.plot([angle, angle], [0, value], color='black', linewidth=1, linestyle='solid')
+        bbox_props = dict(boxstyle="square,pad=0.2", fc="white", ec="black", lw=0.5)
+        ax.text(angle, value, f"{value * 100:.1f}%", color=colors[i], ha='center', va='bottom', bbox=bbox_props, fontsize=8)
+
+ax.set_ylim(0, 1)
+for i in [0.25, 0.5, 0.75, 1.0]:
+    ax.plot(angles, [i] * len(columns_to_plot) + [i], color='black', linewidth=1, linestyle='dotted')
+
+ax.set_yticklabels([])
+ax.set_yticks([])
+ax.set_title(f"{players[0]} ({player_season_map[players[0]]}) vs. {players[1]} ({player_season_map[players[1]]})\nPlayer Profile Comparison", size=12, color='black', y=1.1)
+
+legend_elements = [Patch(facecolor=colors[i], edgecolor='black', label=f"{players[i]} ({player_season_map[players[i]]})") for i in range(len(players))]
+ax.legend(handles=legend_elements, loc='lower left', fontsize='small')
+
+plt.figtext(0.5, -0.01, "Data Source: basketball-reference.com", 
+            ha='center', fontsize=7, color='black')
+
+plt.tight_layout()
+plt.show()
+
