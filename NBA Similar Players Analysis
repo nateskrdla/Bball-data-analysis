@@ -1,0 +1,91 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
+from matplotlib import colors as mcolors
+from sklearn.metrics.pairwise import cosine_similarity
+
+# Load the percentile data
+file_path = "nba_combined_stats_percentiles_2024_2025.csv"
+percentile_data = pd.read_csv(file_path)
+
+# Select player to compare
+player = "Alex Caruso"
+columns_to_plot = ['3P%', '2P%', 'FTr', 'eFG%', 'TS%', 'ORtg', 'DRtg', 'BLK%', 'STL%', 'DRB%', 'ORB%', 'TOV%', 'AST%', 'RIMr', 'RIM%', 'AST:USG', '3PA','RIMA', '2PA']
+
+# Aggregate stats for multi-team players
+if 'G' in percentile_data.columns:
+    weighted_data = percentile_data.copy()
+    for col in columns_to_plot:
+        weighted_data[col] = weighted_data[col] * weighted_data['G']
+    percentile_data = weighted_data.groupby(['Player', 'Season_poss'], as_index=False).sum()
+    for col in columns_to_plot:
+        percentile_data[col] /= percentile_data['G']
+    percentile_data.drop(columns=['G'], inplace=True)
+else:
+    percentile_data = percentile_data.groupby(['Player', 'Season_poss'], as_index=False)[columns_to_plot].mean()
+
+player_data = percentile_data[percentile_data['Player'] == player]
+
+if player_data.empty:
+    print(f"Player {player} not found in the dataset.")
+else:
+    # Handle NaN values
+    percentile_data = percentile_data.copy()
+    percentile_data[columns_to_plot] = percentile_data[columns_to_plot].apply(lambda x: x.fillna(x.mean()))
+    
+    # Extract player values for latest season
+    latest_season = player_data['Season_poss'].max()
+    player_values = player_data[player_data['Season_poss'] == latest_season][columns_to_plot].values.reshape(1, -1)
+    
+    # Compute cosine similarity
+    all_values = percentile_data[columns_to_plot].values
+    similarity_scores = cosine_similarity(player_values, all_values)[0]
+    
+    # Add similarity scores
+    percentile_data['Similarity'] = similarity_scores
+    
+    # Get top 10 comps
+    similar_players = percentile_data[percentile_data['Player'] != player].nlargest(10, 'Similarity')
+    print("Top 10 Most Similar Players to", player, "in", latest_season)
+    print(similar_players[['Player', 'Season_poss', 'Similarity']])
+
+    # === 📊 Modern Styled Table ===
+    table_data = similar_players[['Player', 'Season_poss', 'Similarity']].copy()
+    table_data['Similarity'] = table_data['Similarity'].round(3)
+    table_data = table_data.reset_index(drop=True)
+
+    # Define colors
+    header_color = '#262626'  # Dark gray
+    row_colors = ['#f2f2f2', '#ffffff']  # Light gray and white
+    text_color = '#000000'  # Black text
+    header_text_color = '#ffffff'  # White header text
+
+    fig, ax = plt.subplots(figsize=(8, 4))
+    ax.axis('off')
+
+    table = ax.table(
+        cellText=table_data.values,
+        colLabels=table_data.columns,
+        cellLoc='center',
+        loc='center'
+    )
+
+    table.auto_set_font_size(False)
+    table.set_fontsize(11)
+    table.scale(1, 1.6)
+
+    # Style header
+    for (row, col), cell in table.get_celld().items():
+        if row == 0:
+            cell.set_facecolor(header_color)
+            cell.set_text_props(weight='bold', color=header_text_color)
+            cell.set_edgecolor('#ffffff')
+        else:
+            cell.set_facecolor(row_colors[row % 2])
+            cell.set_text_props(color=text_color)
+            cell.set_edgecolor('#ffffff')
+
+    ax.set_title(f"Top 10 Comps for {player} ({latest_season})", fontsize=14, fontweight='bold', pad=20)
+    plt.tight_layout()
+    plt.show()
